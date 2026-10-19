@@ -1,0 +1,196 @@
+---
+title: ECS Overview
+description: Overview on ECS
+sidebar: 
+    order: 10
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+### Example usage
+Here's a quick example on how to create entities, attach components and have a simple system:
+```cpp
+// Component data
+struct Velocity {
+    float x, y, z;
+}
+
+// System (Forward declare, read later)
+void UpdateVelocitySystem(World& world, float deltaTime);
+
+int main() {
+    World world;
+
+    // Create an entity 
+    // This also automatically adds LocalTransform and LocalToWorld components
+    Entity e1 = world.Create();
+
+    // Adds Velocity component to the entity e1
+    world.Emplace<Velocity>(e1, 10.f, 5.f, 0.f); 
+
+    float deltaTime = 1.f / 60.f; // Fake delta time for example
+    UpdateVelocitySystem(world, deltaTime);
+}
+
+// System implementation
+void UpdateVelocitySystem(World& world, float deltaTime)
+{
+    // Get all entities that have the "LocalTransform" AND "Velocity" component.
+    View view = world.GetView<LocalTransform, Velocity>();
+
+    // Loop over each entity using a lambda
+    // Function signature: Entity first, followed by component references
+    view.Each([&](Entity, LocalTransform& t, const Velocity& vel) 
+             { t.position.x += vel.x * deltaTime; });
+
+    // Or you can combine it into 1 line:
+    world.GetView<LocalTransform, Velocity>()
+        .Each([&](Entity, LocalTransform& t, const Velocity& vel)
+        { 
+            t.position.y += vel.y * deltaTime; 
+        });
+}
+```
+
+As for why ECS is needed and helps with performance, see this video from Unity Japan: [Your First Encounter with Unity ECS: A Basic Tutorial](https://www.youtube.com/watch?v=vzF00Wb6wNY&t=633s). It's in Japanese but the animation at [12:26 to 13:28](https://www.youtube.com/watch?v=vzF00Wb6wNY&t=742s) really demonstrates why it's good. It mainly helps with memory layout and the cache.
+
+### World
+The world is a container for all [entities](#entities), [components](#components) and [singletons](#singleton). Usually there's only 1 world but multiple worlds are possible too. Can think of it as a Scene in Unity.
+
+If we are doing something like Unity's Editor, it might be useful to copy/destroy the whole world when playing/stopping.
+
+### Entities
+An Entity is just a `uint32_t` number! (If we hit the limit I'll increase it to `uint64_t`)
+- First **12** bits represent the version. _Range: [0, 4095]_
+- Next **20** bits represent the entity index. _Range: [0, 1,048,574]_
+
+Other points:
+- Since it's just an integer, it's cheap to copy or pass as function arguments.
+- When an entity is destroyed, it's version is incremented and it's recycled. Use `==` or `!=` operators to safely check the entity as they check both the index and version, making sure you aren't referring to a dead or a revived entity.
+- Use `Entity::null` to refer to a null entity.
+
+```cpp
+// Create an entity and add "LocalTransform" and "LocalToWorld" components
+// Use world.CreateEmpty() if you need an entity without any components
+Entity entity = world.Create(); 
+assert(world.IsAlive(entity)); // Entity is alive
+
+world.Destroy(entity);
+world.Destroy(entity); // Destroying twice is allowed
+assert(!world.IsAlive(entity)); // Entity has been destroyed
+```
+
+### Components
+A component is the "data" part in the data-oriented programming. Components store data like position, velocity, agent state, audio info, etc. 
+
+<Aside type='danger'>
+It shouldn't store data-heavy things like meshes, textures or audio files. Especially if multiple entities use the same data. Should use the `Asset` class, and each component in an entity should just store a handle to it (something like an index to it or a shared/weak ptr).
+
+See `MeshRenderer` and `Asset` class for reference.
+</Aside>
+
+You can also use empty structs as tags to categorise entities (e.g. an `Adult` and `Child` tag). Then when using [Views](#systems-or-views), pass the tag components to filter entities.
+
+Code snippets:
+```cpp
+struct Velocity
+{
+    float x, y, z;
+}
+
+World world;
+Entity entity = world.Create();
+
+// === Adding components ===
+world.Emplace<Velocity>(entity);                 // Default construct Velocity
+// Note this will throw an error as you can't add 2 components to the same entity.
+// Use a different entity if you need 2 components
+world.Emplace<Velocity>(entity, 0.f, 5.f, 10.f); // Construct Velocity in place. 
+
+world.SetOrEmplace<Velocity>(entity, 1.f, 2.f, 3.f);  // Overwrite if present, emplace if missing
+world.Set<Velocity>(entity, Velocity{2.f, 4.f, 6.f}); // Overwrites an existing component
+
+// === Getting components ===
+Velocity vel = world.Get<Velocity>(entity);
+Velocity* velPtr = world.TryGet<Velocity>(entity); // Returns a nullptr if component doesn't exist
+
+// === Remove components ===
+world.Remove<Velocity>(entity);
+
+// === Others ===
+bool hasVelocity = world.Has<Velocity>(entity);
+```
+
+<Aside>
+I think the currently API to use entity is slightly unintuitive? <br />
+I might implement something similar to [EnTT's handle](https://github.com/skypjack/entt/wiki/Entity-Component-System#handle).
+
+```cpp
+// Currently use the world to add a component to a entity.
+world.Emplace<T>(entity, ...);
+
+// I might change it to this:
+entity.Emplace<T>(...);
+```
+
+But it requires slightly more memory, and slightly less efficient.
+</Aside>
+
+See also: [Built-in components](built-in-components)
+
+### Systems (or Views)
+About views, referencing the [example above](#example-usage), 
+```cpp
+// System
+void UpdateVelocitySystem(World& world, float deltaTime)
+{
+    // Get a view for entities that contain both "LocalTransform" AND "Velocity" components.
+    View view = world.GetView<LocalTransform, Velocity>();
+
+    // Loop over each entity using a lambda
+    // Function signature: Entity first, followed by component references
+    view.Each([&](Entity, LocalTransform& t, const Velocity& vel) 
+             { t.position.x += vel.x * deltaTime; });
+
+    // Or you can combine it into 1 line:
+    world.GetView<LocalTransform, Velocity>()
+        .Each([&](Entity, LocalTransform& t, const Velocity& vel)
+        { 
+            t.position.y += vel.y * deltaTime; 
+        });
+}
+```
+
+Then call `UpdateVelocitySystem` in the Scene, passing in the `world` and `deltaTime`.
+
+<Aside>
+I think I'll make proper System classes, where you can set where you want the system to run (AppInit, BeforeUpdate, Update, AfterUpdate, Render, AppExit, etc)
+</Aside>
+
+### Singleton
+Similar to the standard [singleton](https://en.wikipedia.org/wiki/Singleton_pattern), it restricts the instantiation of a class to a singular instance. However, instead of relying on global `static` variables, this is bound to a specific `World` instance. It can help in keeping state management cleaner and more modular.
+
+```cpp
+struct Gravity {
+    float y;
+}
+
+assert(!world.HasSingleton<Gravity>()); // Gravity singleton doesn't exist
+world.SetSingleton<Gravity>(-9.8f);
+assert(world.HasSingleton<Gravity>()); // Gravity singleton exists
+
+Gravity& gravity = world.GetSingleton<Gravity>();
+```
+
+## References
+Here's other ECS projects, can use them as a reference:
+- [EnTT](https://github.com/skypjack/entt) (I based my current implementation on it, EnTT has a lot more features though)
+    - [EnTT ECS Crash Course](https://github.com/skypjack/entt/wiki/Entity-Component-System)
+- [Bevy](https://bevy.org/)
+	- [Quick start: ECS](https://bevy.org/learn/quick-start/getting-started/ecs/) 
+	- [ECS](https://docs.rs/bevy_ecs/latest/bevy_ecs/)
+- [Flecs](https://www.flecs.dev/flecs/index.html)
+	- [Entities and Components](https://www.flecs.dev/flecs/EntitiesComponents.html)
+- Unity
+    - [Entities package](https://docs.unity3d.com/Packages/com.unity.entities@6.7/manual/index.html)
+    - Note that Unity's ECS/DOTS is quite different. 

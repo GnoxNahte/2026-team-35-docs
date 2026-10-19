@@ -1,0 +1,19 @@
+:not(pre) > code {
+    border-radius: 0.4em;
+}
+
+pre:has(code) {
+    border-radius: 0.6em;
+}
+
+html[data-theme='light'] {
+    aside :not(pre) > code {
+        background-color: color-mix(in srgb, var(--sl-color-bg-inline-code) 70%, white);
+    }
+}
+
+html[data-theme='dark'] {
+    aside :not(pre) > code {
+        background-color: color-mix(in srgb, var(--sl-color-bg-inline-code) 70%, black);
+    }
+}

@@ -1,0 +1,40 @@
+---
+title: Graphics Overview
+description: Info on how to render objects
+sidebar:
+    order: 20
+---
+
+### Example usage
+```cpp
+// === Stored in Scene ===
+World world;
+Asset asset;
+
+// === Generate in Scene ===
+// Generate the actual mesh and material data
+Mesh mesh = MeshGenerator::GenerateCubeMesh();
+Material mat = MeshGenerator::GenerateCubeMat();
+
+// Add the mesh and material to the asset list
+// It returns a lightweight handle that every entity can refer to
+MeshHandle meshHandle = assets.AddMesh(mesh);
+MaterialHandle matHandle = assets.AddMaterial(mat);
+
+// === Spawn system ===
+Color red {1.f, 0.f, 0.f}, green {0.f, 1.f, 0.f};
+
+// Create() auto adds the LocalTransform and LocalToWorld components
+Entity entity1 = world.Create(); 
+world.Emplace<MeshRenderer>(entity1, meshHandle, matHandle); // Add the cube mesh and material handle
+world.Emplace<Color>(entity1, red);                          // Assign a red color
+
+// Create another entity
+Entity entity2 = world.Create(); 
+world.Emplace<MeshRenderer>(entity2, meshHandle, matHandle); // Assign the same cube mesh and material handle
+world.Emplace<Color>(entity1, green);                        // Assign a red color
+```
+
+Reference:
+- [SceneSimulation::Initialize()](https://github.com/DigiPen-SG-Year-2/2026-team-35/blob/ac9334e002bd26586a26ea6470d438337232e5c2/source/app/SceneSimulation.cpp#L21-L27)
+- [SpawnTestSystem()](https://github.com/DigiPen-SG-Year-2/2026-team-35/blob/ac9334e002bd26586a26ea6470d438337232e5c2/source/app/systems/SpawnTestSystem.cpp#L28-L32)

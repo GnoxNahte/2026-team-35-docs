@@ -1,0 +1,49 @@
+---
+title: Built-in components
+description: Descriptions on ecs's built-in components
+sidebar: 
+    order: 11
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Here are some built-in components for the ecs system. They are just a summary, I might add a references page for each component later.
+
+## LocalTransform
+This stores the 
+- position
+- rotation (using quaternions - [glm::quat](https://glm.g-truc.net/0.9.0/api/a00135.html))
+- scale
+
+Don't have any hierarchy for now, might add later if needed.
+
+Component referenced from [Unity's ECS - LocalTransform](https://docs.unity3d.com/Packages/com.unity.entities@6.7/api/Unity.Transforms.LocalTransform.html)
+
+<Aside type='note'>
+About `LocalTransform` and `LocalToWorld`:
+- `LocalTransform`: Stores the position, rotation and scale of the entity
+- `LocalToWorld`: Stores the model matrix
+
+By right, every entity that has `LocalTransform` should also have `LocalToWorld` and vice versa. I think I'll add something to help it match, maybe something like [entt's `on_construct`](https://github.com/skypjack/entt/wiki/Entity-Component-System#observe-changes). 
+
+However, note that not every entity requires a `LocalTransform` and `LocalToWorld`. If it doesn't need a location in the world, don't need to add it to the entity.
+</Aside>
+
+## LocalToWorld
+This is for rendering, ignore for IMGD. 
+
+This stores a model matrix, to be passed to the GPU. This is only updated before rendering. Made it a separate component to help with [instancing](https://learnopengl.com/Advanced-OpenGL/Instancing) (CompGraphics Tutorial 3. But this is not done yet at time of writing - Wk 8).
+
+## MeshRenderer
+This stores a handle to the mesh and material given by the `Assets` class. Like `Entity`, the handles are just a `uint32_t`. It doesn't store any mesh data (vertex, normal, etc) or material data (color, light specular, etc). 
+
+<Aside type='caution'>
+I might change this, will update if anyone uses this.
+</Aside>
+
+## Camera
+Currently this is a copy of [`EditorCamera`](https://github.com/DigiPen-SG-Year-2/2026-team-35/blob/main/source/render/EditorCamera.h). 
+
+There's 2 systems:
+- SyncCameraSystem: This is just to sync the camera variables (position, up, target) with the other camera. Should delete after EditorCamera is converted to be fully done in ECS
+- CameraSystem: This updates the transform's `position`, `view`, `proj` and `viewProj`. Calculates these once for rendering
