@@ -4,6 +4,8 @@ import starlight from "@astrojs/starlight";
 
 // https://astro.build/config
 export default defineConfig({
+  site: 'https://gnoxnahte.github.io',
+  base: '/2026-team-35-docs',
   integrations: [
     starlight({
       title: "SPACE Docs",
